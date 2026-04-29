@@ -682,7 +682,14 @@
     padding: 1rem;
     background: rgba(2, 4, 10, 0.5);
     border-left: 3px solid var(--neon-pink);
-    transition: all 0.3s;
+    opacity: 0;
+    transform: translateX(-40px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out, background 0.3s, border-left-color 0.3s;
+  }
+
+  .section.reveal {
+    opacity: 1;
+    transform: translateX(0);
   }
 
   .section:hover {
@@ -778,7 +785,8 @@
 
   /* Make instructions screen scrollable on smaller heights */
   #instructions-screen.visible {
-    align-items: flex-start;
+    justify-content: flex-start;
+    align-items: center;
     padding-top: 3rem;
     padding-bottom: 3rem;
   }
@@ -956,7 +964,7 @@
       <div class="coord-cell">
         <div class="coord-label">// DATE DE LANCEMENT</div>
         <div class="coord-value">01.05.2026</div>
-        <div class="coord-sub">T-MINUS 16:30</div>
+        <div class="coord-sub" id="tminus">T-MINUS --:--:--</div>
       </div>
       <div class="coord-cell">
         <div class="coord-label">// COORDONNEES</div>
@@ -1233,7 +1241,7 @@
   const instructionsScreen = document.getElementById('instructions-screen');
   const welcomeName = document.getElementById('welcome-name');
 
-  const AUTHORIZED_PILOTS = ['MENDI', 'SHAMY'];
+  const AUTHORIZED_PILOTS = ['MENDI', 'SHAMY', 'WIZZIWIG'];
   const MISSION_PASSWORD = 'ARTEMIS3';
 
   function normalize(input) {
@@ -1250,11 +1258,18 @@
     if (pilotOk && passwordOk) {
       errorMsg.classList.remove('visible');
       welcomeName.textContent = pilot;
+
+      // Start background music
+      const bgm = document.getElementById('bgm');
+      bgm.volume = 0.4;
+      bgm.play().catch(() => {});
+
       terminalScreen.style.transition = 'opacity 0.8s';
       terminalScreen.style.opacity = '0';
       setTimeout(() => {
         terminalScreen.style.display = 'none';
         instructionsScreen.classList.add('visible');
+        animateSections();
       }, 800);
     } else if (!pilotOk && !passwordOk) {
       showError('! IDENTIFIANT ET CODE INVALIDES !');
@@ -1280,10 +1295,115 @@
     if (e.key === 'Enter') authenticate();
   });
 
+  // === T-MINUS COUNTDOWN ===
+  const launchDate = new Date(2026, 4, 1, 16, 30, 0); // May 1, 2026 16:30 local
+  const tminusEl = document.getElementById('tminus');
+
+  function updateTMinus() {
+    const now = new Date();
+    let diff = launchDate - now;
+
+    if (diff <= 0) {
+      tminusEl.textContent = 'T-MINUS 0-00:00:00 // LANCEMENT !';
+      return;
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    diff -= days * 1000 * 60 * 60 * 24;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    diff -= hours * 1000 * 60 * 60;
+    const minutes = Math.floor(diff / (1000 * 60));
+    diff -= minutes * 1000 * 60;
+    const seconds = Math.floor(diff / 1000);
+
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    const ss = String(seconds).padStart(2, '0');
+
+    tminusEl.textContent = `T-MINUS ${days}-${hh}:${mm}:${ss}`;
+  }
+
+  updateTMinus();
+  setInterval(updateTMinus, 1000);
+
+  // === SECTION REVEAL + TYPEWRITER ===
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function typeText(element, text, speed) {
+    element.textContent = '';
+    for (let i = 0; i < text.length; i++) {
+      element.textContent += text[i];
+      await delay(speed);
+    }
+  }
+
+  async function animateSections() {
+    const sections = instructionsScreen.querySelectorAll('.section');
+
+    // Store original content and clear section body text
+    for (const section of sections) {
+      const num = section.querySelector('.section-num');
+      const title = section.querySelector('.section-title');
+      const p = section.querySelector('.section-content p');
+
+      section._numText = num.textContent;
+      section._titleText = title.textContent;
+      section._pHTML = p.innerHTML;   // preserve highlights
+      section._pText = p.textContent;
+
+      num.textContent = '';
+      title.textContent = '';
+      p.textContent = '';
+    }
+
+    // Wait for instructions screen fade-in
+    await delay(800);
+
+    for (const section of sections) {
+      const num = section.querySelector('.section-num');
+      const title = section.querySelector('.section-title');
+      const p = section.querySelector('.section-content p');
+
+      // Fade section in from left, then scroll it into view
+      section.classList.add('reveal');
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      await delay(550);
+
+      // Type section number
+      await typeText(num, section._numText, 120);
+      await delay(100);
+
+      // Type title
+      await typeText(title, section._titleText, 55);
+      await delay(100);
+
+      // Type paragraph text then restore highlights
+      await typeText(p, section._pText, 15);
+      await delay(80);
+      p.innerHTML = section._pHTML;
+
+      // Re-scroll after text growth to keep section in view
+      section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      await delay(300);
+    }
+
+    // Scroll to transmission footer after last section
+    const transmission = instructionsScreen.querySelector('.transmission');
+    if (transmission) {
+      await delay(400);
+      transmission.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }
+
   window.addEventListener('load', () => {
     setTimeout(runLaunch, 300);
   });
 </script>
+
+<audio id="bgm" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop preload="auto"></audio>
 
 </body>
 </html>
